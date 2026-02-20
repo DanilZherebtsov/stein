@@ -100,7 +100,8 @@ final class MenuBarIndexer {
             guard app.activationPolicy == .accessory else { return false }
 
             // Preference: true menu-bar helper style apps (LSUIElement=1)
-            if let bundle = Bundle(url: app.bundleURL),
+            if let bundleURL = app.bundleURL,
+               let bundle = Bundle(url: bundleURL),
                let uiElement = bundle.object(forInfoDictionaryKey: "LSUIElement") as? Bool,
                uiElement {
                 return true
@@ -195,7 +196,7 @@ final class MenuBarIndexer {
         var ref: CFTypeRef?
         let r = AXUIElementCopyAttributeValue(element, attribute as CFString, &ref)
         guard r == .success, let ref else { return nil }
-        return ref as! AXUIElement
+        return ref as? AXUIElement
     }
 
     private func isLikelyMenuBarContainer(_ element: AXUIElement) -> Bool {
