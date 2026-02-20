@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let state = AppStateStore()
@@ -15,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.statusController?.triggerGlobalToggle()
         }
         hotKeyManager?.updateShortcut(state.state.preferences.globalToggleShortcut)
+        applyLaunchAtLoginPreference()
 
         NotificationCenter.default.addObserver(
             self,
@@ -27,6 +29,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func onStateChanged() {
         statusController?.refresh()
         hotKeyManager?.updateShortcut(state.state.preferences.globalToggleShortcut)
+        applyLaunchAtLoginPreference()
+    }
+
+    private func applyLaunchAtLoginPreference() {
+        guard #available(macOS 13.0, *) else { return }
+        do {
+            if state.state.preferences.launchAtLogin {
+                if SMAppService.mainApp.status != .enabled {
+                    try SMAppService.mainApp.register()
+                }
+            } else {
+                if SMAppService.mainApp.status == .enabled {
+                    try SMAppService.mainApp.unregister()
+                }
+            }
+        } catch {
+            NSLog("Stein: failed to update launch-at-login setting: \(error.localizedDescription)")
+        }
     }
 
     private func showPreferences() {

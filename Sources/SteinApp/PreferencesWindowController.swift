@@ -45,6 +45,11 @@ struct PreferencesView: View {
                     set: { state.setHideNewItemsByDefault($0) }
                 ))
 
+                Toggle("Start at login", isOn: Binding(
+                    get: { state.state.preferences.launchAtLogin },
+                    set: { state.setLaunchAtLogin($0) }
+                ))
+
                 Picker("Global shortcut", selection: Binding(
                     get: { state.state.preferences.globalToggleShortcut },
                     set: { state.setGlobalToggleShortcut($0) }

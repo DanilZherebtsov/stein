@@ -57,6 +57,10 @@ final class AppStateStore: ObservableObject {
         state.preferences.hideNewItemsByDefault = value
     }
 
+    func setLaunchAtLogin(_ value: Bool) {
+        state.preferences.launchAtLogin = value
+    }
+
     func setVisibility(itemId: UUID, visible: Bool) {
         guard let index = state.items.firstIndex(where: { $0.id == itemId }) else { return }
         state.items[index].isVisible = visible

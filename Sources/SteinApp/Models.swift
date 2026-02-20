@@ -31,12 +31,14 @@ struct AppPreferences: Codable {
     var hideNewItemsByDefault: Bool
     var menuBarSymbolName: String
     var globalToggleShortcut: String
+    var launchAtLogin: Bool
 
     static let `default` = AppPreferences(
         showsManagedItems: true,
         hideNewItemsByDefault: false,
         menuBarSymbolName: "wineglass",
-        globalToggleShortcut: "⌥⌘B"
+        globalToggleShortcut: "⌥⌘B",
+        launchAtLogin: false
     )
 }
 
