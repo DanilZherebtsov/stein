@@ -8,7 +8,6 @@ fi
 
 APP_NAME="Stein"
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD_DIR="$ROOT_DIR/.build/release"
 DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/${APP_NAME}.app"
 
@@ -16,11 +15,22 @@ rm -rf "$DIST_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 
 pushd "$ROOT_DIR" >/dev/null
-swift build -c release
+swift build -c release --product "$APP_NAME"
+BIN_DIR="$(swift build -c release --show-bin-path)"
+BIN_PATH="$BIN_DIR/$APP_NAME"
 popd >/dev/null
 
-cp "$BUILD_DIR/Stein" "$APP_DIR/Contents/MacOS/Stein"
-chmod +x "$APP_DIR/Contents/MacOS/Stein"
+if [[ ! -f "$BIN_PATH" ]]; then
+  echo "Build output not found: $BIN_PATH"
+  exit 1
+fi
+
+if [[ ! -s "$BIN_PATH" ]]; then
+  echo "Build output is empty: $BIN_PATH"
+  exit 1
+fi
+
+install -m 755 "$BIN_PATH" "$APP_DIR/Contents/MacOS/Stein"
 
 cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -40,7 +50,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 PLIST
 
 pushd "$DIST_DIR" >/dev/null
-zip -qry "${APP_NAME}-macos.zip" "${APP_NAME}.app"
+/usr/bin/ditto -c -k --sequesterRsrc --keepParent "${APP_NAME}.app" "${APP_NAME}-macos.zip"
 popd >/dev/null
 
 echo "Packaged: $DIST_DIR/${APP_NAME}.app"
