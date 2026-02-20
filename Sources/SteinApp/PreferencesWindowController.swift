@@ -154,44 +154,57 @@ struct PreferencesView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Items").font(.title2.bold())
             infoCard(title: "Managed Items") {
-                List {
-                    if state.state.items.isEmpty {
-                        Text("No indexed items yet. Click ‘Index Menu Bar Items’ on Dashboard.")
-                            .foregroundStyle(.secondary)
+                VStack(spacing: 8) {
+                    HStack {
+                        Text("Item").font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        Text("Group").font(.caption).foregroundStyle(.secondary)
+                            .frame(width: 170, alignment: .leading)
+                        Text("Hide").font(.caption).foregroundStyle(.secondary)
+                            .frame(width: 86, alignment: .leading)
                     }
 
-                    ForEach(state.state.items) { item in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.title)
-                                Text(item.canToggleSystemVisibility ? "System-hide supported" : "Proxy mode (no native hide)")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
+                    List {
+                        if state.state.items.isEmpty {
+                            Text("No indexed items yet. Click ‘Index Menu Bar Items’ on Dashboard.")
+                                .foregroundStyle(.secondary)
+                        }
 
-                            Picker("Group", selection: Binding(
-                                get: { item.groupId },
-                                set: { state.assign(itemId: item.id, to: $0) }
-                            )) {
-                                Text("Ungrouped").tag(UUID?.none)
-                                ForEach(state.state.groups) { group in
-                                    Text(group.title).tag(UUID?.some(group.id))
+                        ForEach(state.state.items) { item in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.title)
+                                    Text(item.canToggleSystemVisibility ? "System-hide supported" : "Proxy mode (no native hide)")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
                                 }
-                            }
-                            .frame(width: 170)
+                                Spacer()
 
-                            Toggle("Visible", isOn: Binding(
-                                get: { item.isVisible },
-                                set: { state.setVisibility(itemId: item.id, visible: $0) }
-                            ))
-                            .toggleStyle(.switch)
-                            .frame(width: 86)
-                            .disabled(!item.canToggleSystemVisibility)
+                                Picker("", selection: Binding(
+                                    get: { item.groupId },
+                                    set: { state.assign(itemId: item.id, to: $0) }
+                                )) {
+                                    Text("Ungrouped").tag(UUID?.none)
+                                    ForEach(state.state.groups) { group in
+                                        Text(group.title).tag(UUID?.some(group.id))
+                                    }
+                                }
+                                .labelsHidden()
+                                .frame(width: 170)
+
+                                Toggle("", isOn: Binding(
+                                    get: { !item.isVisible },
+                                    set: { shouldHide in state.setVisibility(itemId: item.id, visible: !shouldHide) }
+                                ))
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                                .frame(width: 86)
+                                .disabled(!item.canToggleSystemVisibility)
+                            }
                         }
                     }
+                    .frame(minHeight: 340)
                 }
-                .frame(minHeight: 360)
             }
         }
     }
