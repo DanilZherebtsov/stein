@@ -18,7 +18,7 @@ pushd "$ROOT_DIR" >/dev/null
 swift build -c release --product "$APP_NAME"
 
 # SwiftPM bin paths can vary by toolchain/OS layout. Resolve robustly.
-BIN_PATH="$(find "$ROOT_DIR/.build" -type f -name "$APP_NAME" -path "*/release/*" | head -n 1 || true)"
+BIN_PATH="$(find "$ROOT_DIR/.build" -type f -name "$APP_NAME" \( -ipath "*/release/*" -o -ipath "*/products/release/*" \) | head -n 1 || true)"
 popd >/dev/null
 
 if [[ -z "$BIN_PATH" ]]; then
@@ -34,6 +34,11 @@ fi
 
 echo "Using binary: $BIN_PATH"
 install -m 755 "$BIN_PATH" "$APP_DIR/Contents/MacOS/Stein"
+
+if [[ ! -s "$APP_DIR/Contents/MacOS/Stein" ]]; then
+  echo "Packaged app binary missing/empty after install step."
+  exit 1
+fi
 
 cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
