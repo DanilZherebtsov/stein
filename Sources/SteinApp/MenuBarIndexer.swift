@@ -72,7 +72,8 @@ final class MenuBarIndexer {
 
         var menuBarRef: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(app, kAXMenuBarAttribute as CFString, &menuBarRef)
-        guard result == .success, let menuBar = menuBarRef as? AXUIElement else { return nil }
+        guard result == .success, let menuBarRef else { return nil }
+        let menuBar = menuBarRef as! AXUIElement
         return menuBar
     }
 
@@ -129,9 +130,9 @@ final class MenuBarIndexer {
         return ""
     }
 
-    private func readStringAttr(_ attribute: CFString, from element: AXUIElement) -> String {
+    private func readStringAttr(_ attribute: String, from element: AXUIElement) -> String {
         var value: CFTypeRef?
-        if AXUIElementCopyAttributeValue(element, attribute, &value) == .success,
+        if AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
            let str = value as? String {
             return str
         }
