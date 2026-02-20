@@ -12,8 +12,7 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "SteinApp",
-            path: "Sources/SteinApp",
-            resources: [.process("Resources")]
+            path: "Sources/SteinApp"
         ),
         .testTarget(
             name: "SteinTests",

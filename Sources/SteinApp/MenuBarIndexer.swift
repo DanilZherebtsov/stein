@@ -22,7 +22,7 @@ final class MenuBarIndexer {
     func indexMenuBarItems() -> [IndexedMenuBarItem] {
         guard let frontBar = findSystemMenuBarElement() else { return [] }
 
-        var childrenRef: CFArray?
+        var childrenRef: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(frontBar, kAXChildrenAttribute as CFString, &childrenRef)
         guard result == .success, let children = childrenRef as? [AXUIElement] else { return [] }
 
@@ -60,7 +60,7 @@ final class MenuBarIndexer {
         guard let pid = item.owningPID, let axIdentifier = item.axIdentifier else { return }
         guard let element = findMenuBarItem(pid: pid, identifier: axIdentifier, fallbackTitle: item.title) else { return }
 
-        let value = visible ? kCFBooleanFalse : kCFBooleanTrue
+        let value: CFBoolean = visible ? kCFBooleanFalse : kCFBooleanTrue
         _ = AXUIElementSetAttributeValue(element, kAXHiddenAttribute as CFString, value)
     }
 
@@ -110,7 +110,7 @@ final class MenuBarIndexer {
 
     private func findMenuBarItem(pid: Int32, identifier: String, fallbackTitle: String) -> AXUIElement? {
         guard let menuBar = findSystemMenuBarElement() else { return nil }
-        var childrenRef: CFArray?
+        var childrenRef: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(menuBar, kAXChildrenAttribute as CFString, &childrenRef)
         guard result == .success, let children = childrenRef as? [AXUIElement] else { return nil }
 
