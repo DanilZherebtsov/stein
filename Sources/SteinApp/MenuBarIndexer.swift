@@ -20,23 +20,21 @@ final class MenuBarIndexer {
     }
 
     func indexMenuBarItems() -> [IndexedMenuBarItem] {
-        guard let frontBar = findSystemMenuBarElement() else { return [] }
+        guard let menuBar = findSystemMenuBarElement() else { return [] }
 
-        var childrenRef: CFTypeRef?
-        let result = AXUIElementCopyAttributeValue(frontBar, kAXChildrenAttribute as CFString, &childrenRef)
-        guard result == .success, let children = childrenRef as? [AXUIElement] else { return [] }
-
+        let candidates = descendants(of: menuBar, maxDepth: 6)
         var entries: [IndexedMenuBarItem] = []
 
-        for child in children {
+        for element in candidates where isLikelyMenuExtra(element) {
             var pid: pid_t = 0
-            AXUIElementGetPid(child, &pid)
+            AXUIElementGetPid(element, &pid)
+            guard pid != 0 else { continue }
 
-            let title = readTitle(from: child)
+            let title = readTitle(from: element, fallbackPID: Int32(pid))
             if title.isEmpty { continue }
 
-            let identifier = stableIdentifier(for: child, fallbackTitle: title)
-            let canToggle = isHiddenSettable(on: child)
+            let identifier = stableIdentifier(for: element, fallbackTitle: title)
+            let canToggle = isHiddenSettable(on: element)
 
             entries.append(
                 IndexedMenuBarItem(
@@ -48,7 +46,7 @@ final class MenuBarIndexer {
             )
         }
 
-        // Deduplicate by title + pid
+        // Deduplicate by pid/title and keep stable sort.
         let deduped = Dictionary(grouping: entries, by: { "\($0.owningPID)::\($0.title.lowercased())" })
             .compactMap { $0.value.first }
             .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
@@ -71,35 +69,81 @@ final class MenuBarIndexer {
         guard let pid = running?.processIdentifier else { return nil }
 
         let app = AXUIElementCreateApplication(pid)
+
         var menuBarRef: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(app, kAXMenuBarAttribute as CFString, &menuBarRef)
-        guard result == .success, let menuBar = (menuBarRef as! AXUIElement?) else { return nil }
+        guard result == .success, let menuBar = menuBarRef as? AXUIElement else { return nil }
         return menuBar
     }
 
-    private func readTitle(from element: AXUIElement) -> String {
-        for key in [kAXTitleAttribute, kAXDescriptionAttribute, kAXHelpAttribute] {
-            var value: CFTypeRef?
-            let r = AXUIElementCopyAttributeValue(element, key as CFString, &value)
-            if r == .success, let str = value as? String, !str.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return str.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func descendants(of root: AXUIElement, maxDepth: Int) -> [AXUIElement] {
+        var result: [AXUIElement] = []
+        var queue: [(AXUIElement, Int)] = [(root, 0)]
+
+        while !queue.isEmpty {
+            let (element, depth) = queue.removeFirst()
+            result.append(element)
+            guard depth < maxDepth else { continue }
+
+            var childrenRef: CFTypeRef?
+            let r = AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenRef)
+            if r == .success, let children = childrenRef as? [AXUIElement] {
+                for child in children {
+                    queue.append((child, depth + 1))
+                }
             }
+        }
+
+        return result
+    }
+
+    private func isLikelyMenuExtra(_ element: AXUIElement) -> Bool {
+        let role = readStringAttr(kAXRoleAttribute, from: element).lowercased()
+        let subrole = readStringAttr(kAXSubroleAttribute, from: element).lowercased()
+
+        if role.contains("menubaritem") || subrole.contains("menubarextra") {
+            return true
+        }
+
+        // Tahoe/Sequoia variants sometimes expose extras as buttons under menu bar containers.
+        if role.contains("button") {
+            let identifier = readStringAttr(kAXIdentifierAttribute, from: element).lowercased()
+            let desc = readStringAttr(kAXDescriptionAttribute, from: element).lowercased()
+            if identifier.contains("status") || identifier.contains("menu") || desc.contains("menu") {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private func readTitle(from element: AXUIElement, fallbackPID: Int32) -> String {
+        for key in [kAXTitleAttribute, kAXDescriptionAttribute, kAXHelpAttribute] {
+            let value = readStringAttr(key, from: element).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty { return value }
+        }
+
+        if let app = NSRunningApplication(processIdentifier: fallbackPID) {
+            return app.localizedName ?? "Menu Item \(fallbackPID)"
+        }
+        return ""
+    }
+
+    private func readStringAttr(_ attribute: CFString, from element: AXUIElement) -> String {
+        var value: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, attribute, &value) == .success,
+           let str = value as? String {
+            return str
         }
         return ""
     }
 
     private func stableIdentifier(for element: AXUIElement, fallbackTitle: String) -> String {
-        var value: CFTypeRef?
-        if AXUIElementCopyAttributeValue(element, kAXIdentifierAttribute as CFString, &value) == .success,
-           let id = value as? String,
-           !id.isEmpty {
-            return id
-        }
+        let id = readStringAttr(kAXIdentifierAttribute, from: element)
+        if !id.isEmpty { return id }
 
-        var role: CFTypeRef?
-        _ = AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role)
-        let roleStr = (role as? String) ?? "unknown"
-        return "\(roleStr)::\(fallbackTitle.lowercased())"
+        let role = readStringAttr(kAXRoleAttribute, from: element)
+        return "\(role)::\(fallbackTitle.lowercased())"
     }
 
     private func isHiddenSettable(on element: AXUIElement) -> Bool {
@@ -110,24 +154,23 @@ final class MenuBarIndexer {
 
     private func findMenuBarItem(pid: Int32, identifier: String, fallbackTitle: String) -> AXUIElement? {
         guard let menuBar = findSystemMenuBarElement() else { return nil }
-        var childrenRef: CFTypeRef?
-        let result = AXUIElementCopyAttributeValue(menuBar, kAXChildrenAttribute as CFString, &childrenRef)
-        guard result == .success, let children = childrenRef as? [AXUIElement] else { return nil }
+        let candidates = descendants(of: menuBar, maxDepth: 6)
 
-        for child in children {
+        for element in candidates where isLikelyMenuExtra(element) {
             var childPID: pid_t = 0
-            AXUIElementGetPid(child, &childPID)
+            AXUIElementGetPid(element, &childPID)
             guard Int32(childPID) == pid else { continue }
 
-            let ident = stableIdentifier(for: child, fallbackTitle: readTitle(from: child))
-            if ident == identifier { return child }
+            let ident = stableIdentifier(for: element, fallbackTitle: readTitle(from: element, fallbackPID: Int32(childPID)))
+            if ident == identifier { return element }
         }
 
-        return children.first(where: { element in
+        return candidates.first(where: { element in
+            guard isLikelyMenuExtra(element) else { return false }
             var childPID: pid_t = 0
             AXUIElementGetPid(element, &childPID)
             guard Int32(childPID) == pid else { return false }
-            return readTitle(from: element).caseInsensitiveCompare(fallbackTitle) == .orderedSame
+            return readTitle(from: element, fallbackPID: Int32(childPID)).caseInsensitiveCompare(fallbackTitle) == .orderedSame
         })
     }
 }
