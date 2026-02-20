@@ -26,10 +26,9 @@ final class MenuBarIndexer {
     }
 
     func indexMenuBarItems() -> [IndexedMenuBarItem] {
-        let roots = allMenuBarRoots()
-        guard !roots.isEmpty else { return [] }
-
         var entries: [IndexedMenuBarItem] = []
+
+        let roots = allMenuBarRoots()
         for root in roots {
             for element in menuBarCandidates(from: root) {
                 var pid: pid_t = 0
@@ -50,6 +49,9 @@ final class MenuBarIndexer {
                 )
             }
         }
+
+        // Fallback for menu-bar-only apps that do not expose clear AX menu-item nodes.
+        entries.append(contentsOf: indexLikelyMenuBarApps())
 
         return Dictionary(grouping: entries, by: { "\($0.owningPID)::\($0.title.lowercased())" })
             .compactMap { $0.value.first }
@@ -80,6 +82,45 @@ final class MenuBarIndexer {
     }
 
     // MARK: - Discovery
+
+    private func indexLikelyMenuBarApps() -> [IndexedMenuBarItem] {
+        let blockedBundleIDs: Set<String> = [
+            "com.apple.finder",
+            "com.apple.dock",
+            "com.apple.loginwindow",
+            "com.apple.SystemUIServer",
+            "com.apple.systemuiserver",
+            "com.apple.controlcenter",
+            "lab.agentfoundry.stein"
+        ]
+
+        let apps = NSWorkspace.shared.runningApplications.filter { app in
+            guard app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return false }
+            guard let bid = app.bundleIdentifier, !blockedBundleIDs.contains(bid) else { return false }
+            guard app.activationPolicy == .accessory else { return false }
+
+            // Preference: true menu-bar helper style apps (LSUIElement=1)
+            if let bundle = Bundle(url: app.bundleURL),
+               let uiElement = bundle.object(forInfoDictionaryKey: "LSUIElement") as? Bool,
+               uiElement {
+                return true
+            }
+
+            // Fallback for helper apps that still use accessory policy.
+            return true
+        }
+
+        return apps.compactMap { app in
+            guard let name = app.localizedName, !name.isEmpty else { return nil }
+            let bid = app.bundleIdentifier ?? "pid-\(app.processIdentifier)"
+            return IndexedMenuBarItem(
+                title: "\(name) menu item",
+                owningPID: Int32(app.processIdentifier),
+                axIdentifier: "app::\(bid)",
+                canToggleVisibility: false
+            )
+        }
+    }
 
     private func allMenuBarRoots() -> [AXUIElement] {
         let hosts = NSWorkspace.shared.runningApplications.filter { app in
