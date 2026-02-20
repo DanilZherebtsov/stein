@@ -1,0 +1,37 @@
+name: macOS Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build-and-package:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Xcode version
+        run: xcodebuild -version
+
+      - name: Build release
+        run: swift build -c release --product Stein
+
+      - name: Package app
+        run: ./scripts/package-macos.sh
+
+      - name: Verify non-empty app binary
+        run: |
+          test -s dist/Stein.app/Contents/MacOS/Stein
+          ls -lah dist
+          ls -lah dist/Stein.app/Contents/MacOS/Stein
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Stein-macos
+          path: |
+            dist/Stein.app
+            dist/Stein-macos.zip
