@@ -6,11 +6,27 @@ struct ManagedItem: Codable, Identifiable, Equatable {
     var isVisible: Bool
     var groupId: UUID?
 
-    init(id: UUID = UUID(), title: String, isVisible: Bool = true, groupId: UUID? = nil) {
+    // Accessibility linkage for real menu-bar items
+    var owningPID: Int32?
+    var axIdentifier: String?
+    var canToggleSystemVisibility: Bool
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        isVisible: Bool = true,
+        groupId: UUID? = nil,
+        owningPID: Int32? = nil,
+        axIdentifier: String? = nil,
+        canToggleSystemVisibility: Bool = false
+    ) {
         self.id = id
         self.title = title
         self.isVisible = isVisible
         self.groupId = groupId
+        self.owningPID = owningPID
+        self.axIdentifier = axIdentifier
+        self.canToggleSystemVisibility = canToggleSystemVisibility
     }
 }
 

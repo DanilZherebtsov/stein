@@ -128,9 +128,13 @@ struct PreferencesView: View {
             }
 
             HStack(spacing: 10) {
-                Button("Import Running Apps") {
-                    let added = state.importRunningApplications()
-                    importMessage = added > 0 ? "Imported \(added) app(s)." : "No new apps found to import."
+                Button("Index Menu Bar Items") {
+                    let added = state.importMenuBarItems()
+                    if !state.accessibilityEnabled() {
+                        importMessage = "Accessibility permission is required. Open System Settings → Privacy & Security → Accessibility and enable Stein, then retry."
+                    } else {
+                        importMessage = added > 0 ? "Indexed \(added) new menu bar item(s)." : "No new menu bar items found."
+                    }
                 }
                 .buttonStyle(.borderedProminent)
 
@@ -152,13 +156,18 @@ struct PreferencesView: View {
             infoCard(title: "Managed Items") {
                 List {
                     if state.state.items.isEmpty {
-                        Text("No items yet. Click ‘Import Running Apps’ on Dashboard.")
+                        Text("No indexed items yet. Click ‘Index Menu Bar Items’ on Dashboard.")
                             .foregroundStyle(.secondary)
                     }
 
                     ForEach(state.state.items) { item in
                         HStack {
-                            Text(item.title)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.title)
+                                Text(item.canToggleSystemVisibility ? "System-hide supported" : "Proxy mode (no native hide)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                             Spacer()
 
                             Picker("Group", selection: Binding(
@@ -250,6 +259,20 @@ struct PreferencesView: View {
                     get: { state.state.preferences.launchAtLogin },
                     set: { state.setLaunchAtLogin($0) }
                 ))
+            }
+
+            infoCard(title: "Accessibility") {
+                HStack {
+                    Text(state.accessibilityEnabled() ? "Granted" : "Not granted")
+                        .foregroundStyle(state.accessibilityEnabled() ? .green : .orange)
+                    Spacer()
+                    Button("Open Permission Prompt") {
+                        state.requestAccessibilityPermission()
+                    }
+                }
+                Text("Required to index real menu bar items and toggle system visibility where supported.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             infoCard(title: "Stein Icon") {

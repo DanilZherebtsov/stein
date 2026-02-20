@@ -7,6 +7,8 @@ extension Notification.Name {
 
 final class AppStateStore: ObservableObject {
     private let fileURL: URL
+    private let menuBarIndexer = MenuBarIndexer()
+
     @Published private(set) var state: PersistedState {
         didSet {
             save()
@@ -35,12 +37,24 @@ final class AppStateStore: ObservableObject {
         }
     }
 
+    func accessibilityEnabled() -> Bool {
+        menuBarIndexer.accessibilityEnabled()
+    }
+
+    func requestAccessibilityPermission() {
+        menuBarIndexer.ensureAccessibilityPrompt()
+    }
+
     func toggleAllManagedItems() {
         state.preferences.showsManagedItems.toggle()
         let shouldShow = state.preferences.showsManagedItems
+
         state.items = state.items.map { item in
             var next = item
             next.isVisible = shouldShow
+            if next.canToggleSystemVisibility {
+                menuBarIndexer.setVisibility(for: next, visible: shouldShow)
+            }
             return next
         }
     }
@@ -64,6 +78,10 @@ final class AppStateStore: ObservableObject {
     func setVisibility(itemId: UUID, visible: Bool) {
         guard let index = state.items.firstIndex(where: { $0.id == itemId }) else { return }
         state.items[index].isVisible = visible
+        let item = state.items[index]
+        if item.canToggleSystemVisibility {
+            menuBarIndexer.setVisibility(for: item, visible: visible)
+        }
     }
 
     func assign(itemId: UUID, to groupId: UUID?) {
@@ -80,22 +98,30 @@ final class AppStateStore: ObservableObject {
     }
 
     @discardableResult
-    func importRunningApplications() -> Int {
-        let apps = NSWorkspace.shared.runningApplications
-            .filter { $0.activationPolicy == .regular }
-            .compactMap(\.localizedName)
-            .filter { !$0.isEmpty }
-
-        let existing = Set(state.items.map { $0.title.lowercased() })
-        let newTitles = Array(Set(apps.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }))
-            .filter { !existing.contains($0.lowercased()) }
-            .sorted()
-
-        for title in newTitles {
-            addItem(title: title)
+    func importMenuBarItems() -> Int {
+        if !menuBarIndexer.accessibilityEnabled() {
+            menuBarIndexer.ensureAccessibilityPrompt()
+            return 0
         }
 
-        return newTitles.count
+        let indexed = menuBarIndexer.indexMenuBarItems()
+        let existing = Set(state.items.compactMap { item -> String? in
+            guard let pid = item.owningPID else { return nil }
+            return "\(pid)::\(item.title.lowercased())"
+        })
+
+        let newItems = indexed.filter { !existing.contains("\($0.owningPID)::\($0.title.lowercased())") }
+        for entry in newItems {
+            let item = ManagedItem(
+                title: entry.title,
+                isVisible: !state.preferences.hideNewItemsByDefault,
+                owningPID: entry.owningPID,
+                axIdentifier: entry.axIdentifier,
+                canToggleSystemVisibility: entry.canToggleVisibility
+            )
+            state.items.append(item)
+        }
+        return newItems.count
     }
 
     func addGroup(title: String, symbolName: String) {

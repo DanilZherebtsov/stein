@@ -11,7 +11,8 @@ Stein is a native macOS menu bar utility inspired by Bartender-style workflows.
 - Configurable global hotkey (preset options, default `⌥⌘B`).
 - New-item policy (`hide by default` on/off).
 - Start at login toggle (macOS login items integration).
-- Import real running apps into managed list.
+- Index real menu bar items into managed list (Accessibility permission required).
+- Toggle visibility for indexed items where macOS exposes settable accessibility state.
 - Basic preferences UI for item visibility, grouping, and icon selection.
 - Persistence in `~/Library/Application Support/Stein/state.json`.
 
@@ -56,7 +57,7 @@ This generates:
 
 ## Next planned work
 
-1. Global hotkey registration (real handler)
-2. Layout editor with group assignment UI
-3. Integration layer for controlled visibility of external menu extras
+1. Free-form custom shortcut recorder (not just preset list)
+2. Stronger matching for renamed/reordered menu extras across reboots
+3. Expanded native visibility handling where AX supports additional attributes
 4. Notch-aware overflow behavior
