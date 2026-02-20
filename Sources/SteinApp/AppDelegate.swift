@@ -4,10 +4,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let state = AppStateStore()
     private var statusController: StatusItemController?
     private var preferencesWindowController: PreferencesWindowController?
+    private var hotKeyManager: GlobalHotKeyManager?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusController = StatusItemController(state: state) { [weak self] in
             self?.showPreferences()
+        }
+
+        hotKeyManager = GlobalHotKeyManager { [weak self] in
+            self?.statusController?.triggerGlobalToggle()
         }
     }
 

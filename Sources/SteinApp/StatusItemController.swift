@@ -62,9 +62,13 @@ final class StatusItemController {
         statusItem.menu = menu
     }
 
-    @objc private func toggleManagedItems() {
+    func triggerGlobalToggle() {
         state.toggleAllManagedItems()
         rebuildMenu()
+    }
+
+    @objc private func toggleManagedItems() {
+        triggerGlobalToggle()
     }
 
     @objc private func toggleSingleItem(_ sender: NSMenuItem) {

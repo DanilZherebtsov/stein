@@ -8,6 +8,7 @@ Stein is a native macOS menu bar utility inspired by Bartender-style workflows.
 - Show/hide state management for managed items.
 - Group model (many items -> one logical parent group in Stein menu).
 - Quick toggle for all managed items.
+- Global hotkey: `⌥⌘B` toggles managed items.
 - New-item policy (`hide by default` on/off).
 - Basic preferences UI for item visibility and icon selection.
 - Persistence in `~/Library/Application Support/Stein/state.json`.
