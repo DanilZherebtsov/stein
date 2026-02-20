@@ -14,6 +14,11 @@ let package = Package(
             name: "SteinApp",
             path: "Sources/SteinApp",
             resources: [.process("Resources")]
+        ),
+        .testTarget(
+            name: "SteinTests",
+            dependencies: ["SteinApp"],
+            path: "Tests/SteinTests"
         )
     ]
 )

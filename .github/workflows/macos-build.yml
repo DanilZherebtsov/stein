@@ -16,17 +16,14 @@ jobs:
       - name: Xcode version
         run: xcodebuild -version
 
+      - name: Run unit tests
+        run: swift test
+
       - name: Build release
         run: swift build -c release --product Stein
 
-      - name: Package app
-        run: ./scripts/package-macos.sh
-
-      - name: Verify non-empty app binary
-        run: |
-          test -s dist/Stein.app/Contents/MacOS/Stein
-          ls -lah dist
-          ls -lah dist/Stein.app/Contents/MacOS/Stein
+      - name: Package + verify app payload
+        run: ./scripts/verify-package-macos.sh
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
