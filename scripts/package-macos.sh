@@ -16,12 +16,14 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 
 pushd "$ROOT_DIR" >/dev/null
 swift build -c release --product "$APP_NAME"
-BIN_DIR="$(swift build -c release --show-bin-path)"
-BIN_PATH="$BIN_DIR/$APP_NAME"
+
+# SwiftPM bin paths can vary by toolchain/OS layout. Resolve robustly.
+BIN_PATH="$(find "$ROOT_DIR/.build" -type f -name "$APP_NAME" -path "*/release/*" | head -n 1 || true)"
 popd >/dev/null
 
-if [[ ! -f "$BIN_PATH" ]]; then
-  echo "Build output not found: $BIN_PATH"
+if [[ -z "$BIN_PATH" ]]; then
+  echo "Build output not found under .build/*/release/$APP_NAME"
+  find "$ROOT_DIR/.build" -maxdepth 4 -type f | sed 's#^#  - #' || true
   exit 1
 fi
 
@@ -30,6 +32,7 @@ if [[ ! -s "$BIN_PATH" ]]; then
   exit 1
 fi
 
+echo "Using binary: $BIN_PATH"
 install -m 755 "$BIN_PATH" "$APP_DIR/Contents/MacOS/Stein"
 
 cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
