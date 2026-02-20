@@ -14,6 +14,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKeyManager = GlobalHotKeyManager { [weak self] in
             self?.statusController?.triggerGlobalToggle()
         }
+        hotKeyManager?.updateShortcut(state.state.preferences.globalToggleShortcut)
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(onStateChanged),
+            name: .steinStateDidChange,
+            object: nil
+        )
+    }
+
+    @objc private func onStateChanged() {
+        statusController?.refresh()
+        hotKeyManager?.updateShortcut(state.state.preferences.globalToggleShortcut)
     }
 
     private func showPreferences() {

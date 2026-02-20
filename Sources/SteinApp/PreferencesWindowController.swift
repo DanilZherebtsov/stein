@@ -8,7 +8,7 @@ final class PreferencesWindowController: NSWindowController {
 
         let window = NSWindow(contentViewController: hosting)
         window.title = "Stein Preferences"
-        window.setContentSize(NSSize(width: 700, height: 500))
+        window.setContentSize(NSSize(width: 760, height: 560))
         super.init(window: window)
     }
 
@@ -19,59 +19,118 @@ final class PreferencesWindowController: NSWindowController {
 }
 
 struct PreferencesView: View {
-    @State private var refresh: Bool = false
-    let state: AppStateStore
+    @ObservedObject var state: AppStateStore
+    @State private var newGroupName: String = ""
+    @State private var importMessage: String = ""
 
-    private let iconOptions = ["wineglass", "square.stack.3d.up", "line.3.horizontal.decrease.circle", "tray.full"]
+    private let iconOptions = [
+        ("wineglass", "Wine Glass"),
+        ("line.3.horizontal.decrease.circle", "Filter"),
+        ("square.stack.3d.up", "Stack"),
+        ("tray.full", "Tray"),
+        ("folder.fill", "Folder"),
+        ("ellipsis.circle", "Dots")
+    ]
+
+    private let shortcutOptions = ["⌥⌘B", "⌥⌘S", "⌥⌘H", "⌃⌥⌘B", "Disabled"]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Stein v1")
+            Text("Stein")
                 .font(.title2).bold()
 
-            Toggle("Hide newly discovered items by default", isOn: Binding(
-                get: { state.state.preferences.hideNewItemsByDefault },
-                set: { state.setHideNewItemsByDefault($0); refresh.toggle() }
-            ))
+            HStack(spacing: 16) {
+                Toggle("Hide newly discovered items by default", isOn: Binding(
+                    get: { state.state.preferences.hideNewItemsByDefault },
+                    set: { state.setHideNewItemsByDefault($0) }
+                ))
 
-            Picker("Stein icon", selection: Binding(
-                get: { state.state.preferences.menuBarSymbolName },
-                set: { state.setMenuBarSymbol($0); refresh.toggle() }
-            )) {
-                ForEach(iconOptions, id: \.self) { icon in
-                    Text(icon).tag(icon)
+                Picker("Global shortcut", selection: Binding(
+                    get: { state.state.preferences.globalToggleShortcut },
+                    set: { state.setGlobalToggleShortcut($0) }
+                )) {
+                    ForEach(shortcutOptions, id: \.self) { shortcut in
+                        Text(shortcut).tag(shortcut)
+                    }
                 }
+                .frame(width: 180)
             }
-            .pickerStyle(.segmented)
+
+            HStack {
+                Text("Stein icon")
+                Picker("Stein icon", selection: Binding(
+                    get: { state.state.preferences.menuBarSymbolName },
+                    set: { state.setMenuBarSymbol($0) }
+                )) {
+                    ForEach(iconOptions, id: \.0) { icon, label in
+                        Label(label, systemImage: icon).tag(icon)
+                    }
+                }
+                .frame(width: 260)
+            }
 
             Divider()
 
-            Text("Managed Items")
-                .font(.headline)
+            HStack {
+                Text("Managed Items").font(.headline)
+                Spacer()
+                Button("Import Running Apps") {
+                    let added = state.importRunningApplications()
+                    importMessage = added > 0 ? "Imported \(added) app(s)." : "No new apps found to import."
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            if !importMessage.isEmpty {
+                Text(importMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
             List {
+                if state.state.items.isEmpty {
+                    Text("No items yet. Click ‘Import Running Apps’ to add real apps.")
+                        .foregroundStyle(.secondary)
+                }
+
                 ForEach(state.state.items) { item in
                     HStack {
                         Text(item.title)
                         Spacer()
-                        Toggle("", isOn: Binding(
+
+                        Picker("Group", selection: Binding(
+                            get: { item.groupId },
+                            set: { state.assign(itemId: item.id, to: $0) }
+                        )) {
+                            Text("Ungrouped").tag(UUID?.none)
+                            ForEach(state.state.groups) { group in
+                                Text(group.title).tag(UUID?.some(group.id))
+                            }
+                        }
+                        .frame(width: 170)
+
+                        Toggle("Visible", isOn: Binding(
                             get: { item.isVisible },
-                            set: { state.setVisibility(itemId: item.id, visible: $0); refresh.toggle() }
+                            set: { state.setVisibility(itemId: item.id, visible: $0) }
                         ))
-                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .frame(width: 86)
                     }
                 }
             }
 
             HStack {
-                Button("Add Sample Item") {
-                    state.addItem(title: "New Item \(Int.random(in: 1...999))")
-                    refresh.toggle()
+                TextField("New group name", text: $newGroupName)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 220)
+
+                Button("Add Group") {
+                    state.addGroup(title: newGroupName.trimmingCharacters(in: .whitespacesAndNewlines), symbolName: "square.grid.2x2")
+                    newGroupName = ""
                 }
+                .disabled(newGroupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
                 Spacer()
-                Text("Global toggle shortcut placeholder: \(state.state.preferences.globalToggleShortcut)")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
         }
         .padding(16)

@@ -17,6 +17,10 @@ final class StatusItemController {
         statusItem.button?.imagePosition = .imageOnly
     }
 
+    func refresh() {
+        rebuildMenu()
+    }
+
     private func rebuildMenu() {
         setIcon()
 

@@ -47,15 +47,7 @@ struct PersistedState: Codable {
 
     static let initial = PersistedState(
         preferences: .default,
-        groups: [
-            ItemGroup(title: "Utilities", symbolName: "wrench.and.screwdriver"),
-            ItemGroup(title: "Comms", symbolName: "message")
-        ],
-        items: [
-            ManagedItem(title: "Wi‑Fi", isVisible: true),
-            ManagedItem(title: "Battery", isVisible: true),
-            ManagedItem(title: "VPN", isVisible: false),
-            ManagedItem(title: "Clipboard", isVisible: false)
-        ]
+        groups: [],
+        items: []
     )
 }
