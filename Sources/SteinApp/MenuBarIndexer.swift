@@ -196,7 +196,7 @@ final class MenuBarIndexer {
         var ref: CFTypeRef?
         let r = AXUIElementCopyAttributeValue(element, attribute as CFString, &ref)
         guard r == .success, let ref else { return nil }
-        return ref as? AXUIElement
+        return (ref as! AXUIElement)
     }
 
     private func isLikelyMenuBarContainer(_ element: AXUIElement) -> Bool {
