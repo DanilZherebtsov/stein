@@ -10,7 +10,6 @@ struct IndexedMenuBarItem {
 }
 
 final class MenuBarIndexer {
-    // Known macOS hosts that can own menu bar extras depending on OS version.
     private let hostBundleIDs = [
         "com.apple.systemuiserver",
         "com.apple.controlcenter",
@@ -31,19 +30,15 @@ final class MenuBarIndexer {
         guard !roots.isEmpty else { return [] }
 
         var entries: [IndexedMenuBarItem] = []
-
         for root in roots {
-            let candidates = descendants(of: root, maxDepth: 6)
-            for element in candidates where isLikelyMenuExtra(element) {
+            for element in menuBarCandidates(from: root) {
                 var pid: pid_t = 0
                 AXUIElementGetPid(element, &pid)
                 guard pid != 0 else { continue }
 
                 let title = readTitle(from: element, fallbackPID: Int32(pid))
-                if title.isEmpty { continue }
-
                 let identifier = stableIdentifier(for: element, fallbackTitle: title)
-                let canToggle = isHiddenSettable(on: element)
+                let canToggle = canToggleVisibility(on: element)
 
                 entries.append(
                     IndexedMenuBarItem(
@@ -61,15 +56,30 @@ final class MenuBarIndexer {
             .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
     }
 
-    func setVisibility(for item: ManagedItem, visible: Bool) {
-        guard let pid = item.owningPID, let axIdentifier = item.axIdentifier else { return }
-        guard let element = findMenuBarItem(pid: pid, identifier: axIdentifier, fallbackTitle: item.title) else { return }
+    @discardableResult
+    func setVisibility(for item: ManagedItem, visible: Bool) -> Bool {
+        guard let pid = item.owningPID, let axIdentifier = item.axIdentifier else { return false }
+        guard let element = findMenuBarItem(pid: pid, identifier: axIdentifier, fallbackTitle: item.title) else { return false }
 
-        let value: CFBoolean = visible ? kCFBooleanFalse : kCFBooleanTrue
-        _ = AXUIElementSetAttributeValue(element, kAXHiddenAttribute as CFString, value)
+        // 1) direct hidden attribute on candidate
+        if setHidden(on: element, visible: visible) {
+            return true
+        }
+
+        // 2) try immediate parent chain (some extras expose settable hidden only on ancestor)
+        var current: AXUIElement? = element
+        for _ in 0..<3 {
+            guard let node = current, let parent = copyElementAttribute(node, attribute: kAXParentAttribute) else { break }
+            if setHidden(on: parent, visible: visible) {
+                return true
+            }
+            current = parent
+        }
+
+        return false
     }
 
-    // MARK: - Root discovery
+    // MARK: - Discovery
 
     private func allMenuBarRoots() -> [AXUIElement] {
         let hosts = NSWorkspace.shared.runningApplications.filter { app in
@@ -85,14 +95,33 @@ final class MenuBarIndexer {
                 roots.append(menuBar)
             }
 
-            // Fallback: discover nested menu bars in the host AX tree.
-            let appTree = descendants(of: appAX, maxDepth: 4)
-            for element in appTree where isLikelyMenuBarContainer(element) {
+            // Some versions expose alternate menu-bar containers.
+            for element in descendants(of: appAX, maxDepth: 3) where isLikelyMenuBarContainer(element) {
                 roots.append(element)
             }
         }
 
         return roots
+    }
+
+    private func menuBarCandidates(from root: AXUIElement) -> [AXUIElement] {
+        // Focus on top-level row first to avoid false positives from Control Center internals.
+        let level1 = copyChildren(of: root) ?? []
+        var candidates: [AXUIElement] = []
+
+        for element in level1 {
+            if isLikelyMenuExtra(element) {
+                candidates.append(element)
+                continue
+            }
+
+            // One additional nesting level catches grouped extras without traversing deep popovers.
+            for child in (copyChildren(of: element) ?? []) where isLikelyMenuExtra(child) {
+                candidates.append(child)
+            }
+        }
+
+        return candidates
     }
 
     // MARK: - AX helpers
@@ -142,14 +171,9 @@ final class MenuBarIndexer {
             return true
         }
 
-        // Tahoe/Sequoia variants can expose extras as AXButton-like elements.
         if role.contains("button") {
             let identifier = readStringAttr(kAXIdentifierAttribute, from: element).lowercased()
-            let desc = readStringAttr(kAXDescriptionAttribute, from: element).lowercased()
-            let title = readStringAttr(kAXTitleAttribute, from: element).lowercased()
-            if identifier.contains("status") || identifier.contains("menu") || desc.contains("menu") || !title.isEmpty {
-                return true
-            }
+            return identifier.contains("status") || identifier.contains("menu") || identifier.contains("extra")
         }
 
         return false
@@ -161,10 +185,13 @@ final class MenuBarIndexer {
             if !value.isEmpty { return value }
         }
 
-        if let app = NSRunningApplication(processIdentifier: fallbackPID) {
-            return app.localizedName ?? "Menu Item \(fallbackPID)"
+        if let app = NSRunningApplication(processIdentifier: fallbackPID),
+           let appName = app.localizedName,
+           !appName.isEmpty {
+            return "\(appName) menu item"
         }
-        return ""
+
+        return "Menu item \(fallbackPID)"
     }
 
     private func readStringAttr(_ attribute: String, from element: AXUIElement) -> String {
@@ -184,17 +211,37 @@ final class MenuBarIndexer {
         return "\(role)::\(fallbackTitle.lowercased())"
     }
 
+    private func canToggleVisibility(on element: AXUIElement) -> Bool {
+        if isHiddenSettable(on: element) { return true }
+
+        var current: AXUIElement? = element
+        for _ in 0..<3 {
+            guard let node = current, let parent = copyElementAttribute(node, attribute: kAXParentAttribute) else { break }
+            if isHiddenSettable(on: parent) { return true }
+            current = parent
+        }
+
+        return false
+    }
+
     private func isHiddenSettable(on element: AXUIElement) -> Bool {
         var settable = DarwinBoolean(false)
         let result = AXUIElementIsAttributeSettable(element, kAXHiddenAttribute as CFString, &settable)
         return result == .success && settable.boolValue
     }
 
+    private func setHidden(on element: AXUIElement, visible: Bool) -> Bool {
+        var settable = DarwinBoolean(false)
+        guard AXUIElementIsAttributeSettable(element, kAXHiddenAttribute as CFString, &settable) == .success,
+              settable.boolValue else { return false }
+
+        let value: CFBoolean = visible ? kCFBooleanFalse : kCFBooleanTrue
+        return AXUIElementSetAttributeValue(element, kAXHiddenAttribute as CFString, value) == .success
+    }
+
     private func findMenuBarItem(pid: Int32, identifier: String, fallbackTitle: String) -> AXUIElement? {
         for root in allMenuBarRoots() {
-            let candidates = descendants(of: root, maxDepth: 6)
-
-            for element in candidates where isLikelyMenuExtra(element) {
+            for element in menuBarCandidates(from: root) {
                 var childPID: pid_t = 0
                 AXUIElementGetPid(element, &childPID)
                 guard Int32(childPID) == pid else { continue }
@@ -203,8 +250,7 @@ final class MenuBarIndexer {
                 if ident == identifier { return element }
             }
 
-            if let fallback = candidates.first(where: { element in
-                guard isLikelyMenuExtra(element) else { return false }
+            if let fallback = menuBarCandidates(from: root).first(where: { element in
                 var childPID: pid_t = 0
                 AXUIElementGetPid(element, &childPID)
                 guard Int32(childPID) == pid else { return false }

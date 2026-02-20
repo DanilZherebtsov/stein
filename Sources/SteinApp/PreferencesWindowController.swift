@@ -187,6 +187,7 @@ struct PreferencesView: View {
                             ))
                             .toggleStyle(.switch)
                             .frame(width: 86)
+                            .disabled(!item.canToggleSystemVisibility)
                         }
                     }
                 }

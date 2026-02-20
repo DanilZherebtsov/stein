@@ -51,9 +51,11 @@ final class AppStateStore: ObservableObject {
 
         state.items = state.items.map { item in
             var next = item
-            next.isVisible = shouldShow
             if next.canToggleSystemVisibility {
-                menuBarIndexer.setVisibility(for: next, visible: shouldShow)
+                let applied = menuBarIndexer.setVisibility(for: next, visible: shouldShow)
+                if applied { next.isVisible = shouldShow }
+            } else {
+                next.isVisible = shouldShow
             }
             return next
         }
@@ -77,10 +79,15 @@ final class AppStateStore: ObservableObject {
 
     func setVisibility(itemId: UUID, visible: Bool) {
         guard let index = state.items.firstIndex(where: { $0.id == itemId }) else { return }
-        state.items[index].isVisible = visible
         let item = state.items[index]
+
         if item.canToggleSystemVisibility {
-            menuBarIndexer.setVisibility(for: item, visible: visible)
+            let applied = menuBarIndexer.setVisibility(for: item, visible: visible)
+            if applied {
+                state.items[index].isVisible = visible
+            }
+        } else {
+            state.items[index].isVisible = visible
         }
     }
 
