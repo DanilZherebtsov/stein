@@ -118,33 +118,44 @@ final class AppStateStore: ObservableObject {
         }
 
         let indexed = menuBarIndexer.indexMenuBarItems()
-        let existing = Set(state.items.compactMap { item -> String? in
+        let keyForEntry: (IndexedMenuBarItem) -> String = { "\($0.owningPID)::\($0.title.lowercased())" }
+        let keyForItem: (ManagedItem) -> String? = { item in
             guard let pid = item.owningPID else { return nil }
             return "\(pid)::\(item.title.lowercased())"
-        })
-
-        // Refresh metadata for already-indexed items.
-        for entry in indexed {
-            if let idx = state.items.firstIndex(where: {
-                $0.owningPID == entry.owningPID && $0.title.caseInsensitiveCompare(entry.title) == .orderedSame
-            }) {
-                state.items[idx].axIdentifier = entry.axIdentifier
-                state.items[idx].canToggleSystemVisibility = entry.canToggleVisibility
-            }
         }
 
-        let newItems = indexed.filter { !existing.contains("\($0.owningPID)::\($0.title.lowercased())") }
-        for entry in newItems {
-            let item = ManagedItem(
+        let previousIndexed = state.items.filter { $0.owningPID != nil }
+        let previousByKey = Dictionary(uniqueKeysWithValues: previousIndexed.compactMap { item in
+            guard let key = keyForItem(item) else { return nil }
+            return (key, item)
+        })
+
+        let nonIndexedCustomItems = state.items.filter { $0.owningPID == nil }
+
+        let rebuiltIndexed: [ManagedItem] = indexed.map { entry in
+            let key = keyForEntry(entry)
+            if let prev = previousByKey[key] {
+                var merged = prev
+                merged.axIdentifier = entry.axIdentifier
+                merged.canToggleSystemVisibility = entry.canToggleVisibility
+                return merged
+            }
+
+            return ManagedItem(
                 title: entry.title,
                 isVisible: !state.preferences.hideNewItemsByDefault,
                 owningPID: entry.owningPID,
                 axIdentifier: entry.axIdentifier,
                 canToggleSystemVisibility: entry.canToggleVisibility
             )
-            state.items.append(item)
         }
-        return newItems.count
+
+        state.items = nonIndexedCustomItems + rebuiltIndexed
+
+        let previousKeys = Set(previousByKey.keys)
+        let currentKeys = Set(indexed.map(keyForEntry))
+        let addedCount = currentKeys.subtracting(previousKeys).count
+        return addedCount
     }
 
     func addGroup(title: String, symbolName: String) {
