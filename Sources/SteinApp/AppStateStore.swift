@@ -120,7 +120,7 @@ final class AppStateStore: ObservableObject {
         }
 
         let previousIndexed = state.items.filter { $0.owningPID != nil }
-        let previousByKey = Dictionary(uniqueKeysWithValues: previousIndexed.compactMap { item in
+        let previousByKey: [String: ManagedItem] = Dictionary(uniqueKeysWithValues: previousIndexed.compactMap { item in
             guard let key = keyForItem(item) else { return nil }
             return (key, item)
         })
