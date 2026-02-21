@@ -197,6 +197,22 @@ final class MenuBarIndexer {
         return ""
     }
 
+    private func readBoolAttr(_ attribute: String, from element: AXUIElement) -> Bool? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let value else { return nil }
+
+        if CFGetTypeID(value) == CFBooleanGetTypeID() {
+            return CFBooleanGetValue((value as! CFBoolean))
+        }
+
+        if let number = value as? NSNumber {
+            return number.boolValue
+        }
+
+        return nil
+    }
+
     private func stableIdentifier(for element: AXUIElement, fallbackTitle: String) -> String {
         let id = readStringAttr(kAXIdentifierAttribute, from: element)
         if !id.isEmpty { return id }
@@ -206,31 +222,48 @@ final class MenuBarIndexer {
     }
 
     private func canToggleVisibility(on element: AXUIElement) -> Bool {
-        if isHiddenSettable(on: element) { return true }
+        if isAttributeSettable(on: element, attribute: kAXHiddenAttribute) { return true }
+        if isAttributeSettable(on: element, attribute: kAXValueAttribute) { return true }
 
         var current: AXUIElement? = element
         for _ in 0..<3 {
             guard let node = current, let parent = copyElementAttribute(node, attribute: kAXParentAttribute) else { break }
-            if isHiddenSettable(on: parent) { return true }
+            if isAttributeSettable(on: parent, attribute: kAXHiddenAttribute) { return true }
+            if isAttributeSettable(on: parent, attribute: kAXValueAttribute) { return true }
             current = parent
         }
 
         return false
     }
 
-    private func isHiddenSettable(on element: AXUIElement) -> Bool {
+    private func isAttributeSettable(on element: AXUIElement, attribute: String) -> Bool {
         var settable = DarwinBoolean(false)
-        let result = AXUIElementIsAttributeSettable(element, kAXHiddenAttribute as CFString, &settable)
+        let result = AXUIElementIsAttributeSettable(element, attribute as CFString, &settable)
         return result == .success && settable.boolValue
     }
 
     private func setHidden(on element: AXUIElement, visible: Bool) -> Bool {
-        var settable = DarwinBoolean(false)
-        guard AXUIElementIsAttributeSettable(element, kAXHiddenAttribute as CFString, &settable) == .success,
-              settable.boolValue else { return false }
+        // Strategy A: kAXHiddenAttribute
+        if isAttributeSettable(on: element, attribute: kAXHiddenAttribute) {
+            let hiddenValue: CFBoolean = visible ? kCFBooleanFalse : kCFBooleanTrue
+            if AXUIElementSetAttributeValue(element, kAXHiddenAttribute as CFString, hiddenValue) == .success,
+               let actualHidden = readBoolAttr(kAXHiddenAttribute, from: element),
+               actualHidden == (!visible) {
+                return true
+            }
+        }
 
-        let value: CFBoolean = visible ? kCFBooleanFalse : kCFBooleanTrue
-        return AXUIElementSetAttributeValue(element, kAXHiddenAttribute as CFString, value) == .success
+        // Strategy B: kAXValueAttribute (some toggles expose state as value)
+        if isAttributeSettable(on: element, attribute: kAXValueAttribute) {
+            let value: CFBoolean = visible ? kCFBooleanTrue : kCFBooleanFalse
+            if AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, value) == .success,
+               let actual = readBoolAttr(kAXValueAttribute, from: element),
+               actual == visible {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func findMenuBarItem(pid: Int32, identifier: String, fallbackTitle: String) -> AXUIElement? {
