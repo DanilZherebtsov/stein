@@ -50,9 +50,6 @@ final class MenuBarIndexer {
             }
         }
 
-        // Fallback for menu-bar-only apps that do not expose clear AX menu-item nodes.
-        entries.append(contentsOf: indexLikelyMenuBarApps())
-
         return Dictionary(grouping: entries, by: { "\($0.owningPID)::\($0.title.lowercased())" })
             .compactMap { $0.value.first }
             .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
@@ -63,12 +60,10 @@ final class MenuBarIndexer {
         guard let pid = item.owningPID, let axIdentifier = item.axIdentifier else { return false }
         guard let element = findMenuBarItem(pid: pid, identifier: axIdentifier, fallbackTitle: item.title) else { return false }
 
-        // 1) direct hidden attribute on candidate
         if setHidden(on: element, visible: visible) {
             return true
         }
 
-        // 2) try immediate parent chain (some extras expose settable hidden only on ancestor)
         var current: AXUIElement? = element
         for _ in 0..<3 {
             guard let node = current, let parent = copyElementAttribute(node, attribute: kAXParentAttribute) else { break }
@@ -82,46 +77,6 @@ final class MenuBarIndexer {
     }
 
     // MARK: - Discovery
-
-    private func indexLikelyMenuBarApps() -> [IndexedMenuBarItem] {
-        let blockedBundleIDs: Set<String> = [
-            "com.apple.finder",
-            "com.apple.dock",
-            "com.apple.loginwindow",
-            "com.apple.SystemUIServer",
-            "com.apple.systemuiserver",
-            "com.apple.controlcenter",
-            "lab.agentfoundry.stein"
-        ]
-
-        let apps = NSWorkspace.shared.runningApplications.filter { app in
-            guard app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return false }
-            guard let bid = app.bundleIdentifier, !blockedBundleIDs.contains(bid) else { return false }
-            guard app.activationPolicy == .accessory else { return false }
-
-            // Preference: true menu-bar helper style apps (LSUIElement=1)
-            if let bundleURL = app.bundleURL,
-               let bundle = Bundle(url: bundleURL),
-               let uiElement = bundle.object(forInfoDictionaryKey: "LSUIElement") as? Bool,
-               uiElement {
-                return true
-            }
-
-            // Fallback for helper apps that still use accessory policy.
-            return true
-        }
-
-        return apps.compactMap { app in
-            guard let name = app.localizedName, !name.isEmpty else { return nil }
-            let bid = app.bundleIdentifier ?? "pid-\(app.processIdentifier)"
-            return IndexedMenuBarItem(
-                title: "\(name) menu item",
-                owningPID: Int32(app.processIdentifier),
-                axIdentifier: "app::\(bid)",
-                canToggleVisibility: false
-            )
-        }
-    }
 
     private func allMenuBarRoots() -> [AXUIElement] {
         let hosts = NSWorkspace.shared.runningApplications.filter { app in
@@ -137,7 +92,6 @@ final class MenuBarIndexer {
                 roots.append(menuBar)
             }
 
-            // Some versions expose alternate menu-bar containers.
             for element in descendants(of: appAX, maxDepth: 3) where isLikelyMenuBarContainer(element) {
                 roots.append(element)
             }
@@ -147,7 +101,6 @@ final class MenuBarIndexer {
     }
 
     private func menuBarCandidates(from root: AXUIElement) -> [AXUIElement] {
-        // Focus on top-level row first to avoid false positives from Control Center internals.
         let level1 = copyChildren(of: root) ?? []
         var candidates: [AXUIElement] = []
 
@@ -157,7 +110,6 @@ final class MenuBarIndexer {
                 continue
             }
 
-            // One additional nesting level catches grouped extras without traversing deep popovers.
             for child in (copyChildren(of: element) ?? []) where isLikelyMenuExtra(child) {
                 candidates.append(child)
             }

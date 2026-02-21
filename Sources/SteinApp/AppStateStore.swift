@@ -53,7 +53,11 @@ final class AppStateStore: ObservableObject {
             var next = item
             if next.canToggleSystemVisibility {
                 let applied = menuBarIndexer.setVisibility(for: next, visible: shouldShow)
-                if applied { next.isVisible = shouldShow }
+                if applied {
+                    next.isVisible = shouldShow
+                } else {
+                    next.canToggleSystemVisibility = false
+                }
             } else {
                 next.isVisible = shouldShow
             }
@@ -85,6 +89,8 @@ final class AppStateStore: ObservableObject {
             let applied = menuBarIndexer.setVisibility(for: item, visible: visible)
             if applied {
                 state.items[index].isVisible = visible
+            } else {
+                state.items[index].canToggleSystemVisibility = false
             }
         } else {
             state.items[index].isVisible = visible
@@ -116,6 +122,16 @@ final class AppStateStore: ObservableObject {
             guard let pid = item.owningPID else { return nil }
             return "\(pid)::\(item.title.lowercased())"
         })
+
+        // Refresh metadata for already-indexed items.
+        for entry in indexed {
+            if let idx = state.items.firstIndex(where: {
+                $0.owningPID == entry.owningPID && $0.title.caseInsensitiveCompare(entry.title) == .orderedSame
+            }) {
+                state.items[idx].axIdentifier = entry.axIdentifier
+                state.items[idx].canToggleSystemVisibility = entry.canToggleVisibility
+            }
+        }
 
         let newItems = indexed.filter { !existing.contains("\($0.owningPID)::\($0.title.lowercased())") }
         for entry in newItems {
