@@ -199,7 +199,6 @@ struct PreferencesView: View {
                                 .labelsHidden()
                                 .toggleStyle(.switch)
                                 .frame(width: 86)
-                                .disabled(!item.canToggleSystemVisibility)
                             }
                         }
                     }

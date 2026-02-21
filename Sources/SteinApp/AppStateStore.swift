@@ -51,15 +51,12 @@ final class AppStateStore: ObservableObject {
 
         state.items = state.items.map { item in
             var next = item
-            if next.canToggleSystemVisibility {
-                let applied = menuBarIndexer.setVisibility(for: next, visible: shouldShow)
-                if applied {
-                    next.isVisible = shouldShow
-                } else {
-                    next.canToggleSystemVisibility = false
-                }
-            } else {
+            let applied = menuBarIndexer.setVisibility(for: next, visible: shouldShow)
+            if applied {
                 next.isVisible = shouldShow
+                next.canToggleSystemVisibility = true
+            } else {
+                next.canToggleSystemVisibility = false
             }
             return next
         }
@@ -85,15 +82,13 @@ final class AppStateStore: ObservableObject {
         guard let index = state.items.firstIndex(where: { $0.id == itemId }) else { return }
         let item = state.items[index]
 
-        if item.canToggleSystemVisibility {
-            let applied = menuBarIndexer.setVisibility(for: item, visible: visible)
-            if applied {
-                state.items[index].isVisible = visible
-            } else {
-                state.items[index].canToggleSystemVisibility = false
-            }
-        } else {
+        let applied = menuBarIndexer.setVisibility(for: item, visible: visible)
+        if applied {
             state.items[index].isVisible = visible
+            state.items[index].canToggleSystemVisibility = true
+        } else {
+            // Keep previous visible state if OS-level hide/show could not be applied.
+            state.items[index].canToggleSystemVisibility = false
         }
     }
 
